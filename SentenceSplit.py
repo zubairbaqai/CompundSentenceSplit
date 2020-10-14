@@ -2,6 +2,7 @@ import nltk
 import re
 from pycorenlp import *
 from nltk.tree import *
+import copy
 nlp=StanfordCoreNLP("http://localhost:9000/")
 
 # get verb phrases
@@ -40,8 +41,10 @@ def get_verb_phrases(t):
     verb_phrases = []
     num_children = len(t)
 
-
-
+    # if(t.label() == "VP" and t[1].label() == "S"):
+    #     print("SETTTING")
+    #     t[1].set_label("VP")
+    #     t.draw()
 
 
 
@@ -54,6 +57,14 @@ def get_verb_phrases(t):
 
     # if(t.label() == "NP"):
     #     verb_phrases.extend(' '.join(t.leaves()))
+
+
+
+
+
+
+
+
 
 
     if t.label() =="VP":
@@ -70,15 +81,24 @@ def get_verb_phrases(t):
                         NewStringLevel=CurrentTreeLevel
 
 
+                #### Handling the cases where we Find PRP , NP , VP (If you are one of the first ten people you will receive a gift card)
+
+                    parent_index = t.parent_index()
+                    newPP=""
+                    if t._parent and parent_index > 1:
+                        word_tree=ParentedTree.convert(t._parent[parent_index - 2])
+                        # if(word_tree.label())
+                        for i in word_tree.leaves():
+                            newPP=newPP + " " + i
+
+                        print(newPP)
+                        AddString=newPP+AddString
+
+
 
 
 
     if t.label() != "VP" :
-
-
-
-
-
 
 
 
@@ -112,13 +132,32 @@ def get_verb_phrases(t):
 
 
 
+                    leftSibling=ParentedTree.convert(t.left_sibling())  ### Fixing the 'BY" problem by clicking on the button and accepting the terms and condition you provide your personal information to u
+                    if(leftSibling !=None and leftSibling.label()=="IN"):
+                        AddIN=""
+                        for i in leftSibling.leaves():
+                            AddIN=AddIN+i
+
+                        Result[0]=AddIN+" "+Result[0]
+
+
+
 
 
                 if(len(Result)>0):
                     Result[-1]=Result[-1] + StringWithSandNPandVP
                 StringWithSandNPandVP=""
 
-                #######################
+
+
+
+                ####################3
+
+
+
+
+
+                #########################
 
 
                 verb_phrases.extend(Result) ##########3 Recurssion
@@ -128,9 +167,19 @@ def get_verb_phrases(t):
                 AddString=""
 
 
-    elif t.label() == "VP" and num_VP > 1:
+
+    ############33 MAJOR CHANGE , when VP dosnt have more VP , but deep inside there are structure that can be broken down.
+
+
+
+
+
+
+    elif (t.label() == "VP" and num_VP > 1)   : #or (t.label()=="VP" and t[1].label()=="S")
+
         for i in range(0, num_children):
-            if t[i].label() == "VP":
+            if t[i].label() == "VP" : #or (len(t[i])==1 and t[i].label()=="S" and t.label()=="VP")
+
                 if t[i].height() > 2:
                     CurrentTreeLevel += 1
                     verb_phrases.extend(get_verb_phrases(t[i]))   ##########3 Recurssion
@@ -138,6 +187,9 @@ def get_verb_phrases(t):
                 if (NewStringLevel > CurrentTreeLevel):
                     AddString = ""
     else: #
+        # print(t.label(), "CHECKING")
+        # print(num_VP)
+        #     t.draw()
 
         done=False
         if(AddString!=""): #######If direct sibling is NP
@@ -189,33 +241,75 @@ def get_clause_list(sent):
 
     clause_list = []
     sub_trees = []
+    ContinueAgain=False
     # sent_tree.pretty_print()
 
     # break the tree into subtrees of clauses using
     # clause levels "S","SBAR","SBARQ","SINV","SQ"
     for sub_tree in reversed(list(sent_tree.subtrees())):
+        if(ContinueAgain and sub_tree.label()=="SBAR"):
+            print(sub_tree.label(),"Continue")
+
+            ContinueAgain=False
+            continue
+
 
         if sub_tree.label() in clause_level_list:
             if sub_tree.parent().label() in clause_level_list and sub_tree.parent().label() == "S":
+
                 continue
 
             if (len(sub_tree) == 1 and sub_tree.label() == "S" and sub_tree[0].label() == "VP" and sub_tree[0][0].label()!="VBZ" ### 'lets meet at 8:00'
                 and not sub_tree.parent().label() in clause_level_list):
-
                 continue
 
 
+
+
+
+            LeftSibling=ParentedTree.convert(sub_tree.left_sibling())
+
+            if(LeftSibling!=None and LeftSibling.label()=="IN"):
+
+                RemoveIndex=sub_tree.parent().treeposition() + (sub_tree.parent_index()-1,)
+                del sent_tree[RemoveIndex]
+
+
+                sub_tree.insert(0, LeftSibling)
+
+
+
+
+
+            ################Fixing the Case of Gabriele and Zubair are talking about the problem which they found and they are thinking of solution
+
+            ParentNode=ParentedTree.convert(sub_tree.parent())
+            if (len(sub_tree) > 1):
+
+                if (sub_tree.label() == "S" and ParentNode.label()=="SBAR" and sub_tree[0].label()=="S"):  # and t[1].label()=="S" and t[1][0].label()=="S"
+
+                    sub_trees.append(sub_tree[2])
+                    del sent_tree[sub_tree[1].treeposition()]
+                    del sent_tree[sub_tree[1].treeposition()]
+                    ContinueAgain=True
+                    continue
+
+
+
+                    # RemoveIndex = sub_tree[1].parent().treeposition() + (sub_tree[1].parent_index(),)
+                    # AddBranch = sub_tree[1][0]
+                    # del sub_tree[RemoveIndex]
+                    #
+                    # print("CAme here")
+                    # sub_tree.insert(0, AddBranch)
+                    # sub_tree.draw()
+                    # exit()
+
             sub_trees.append(sub_tree)
             del sent_tree[sub_tree.treeposition()]
+    sub_trees.append(sent_tree) ############TESTING THIS ON
 
 
-    # for each clause level subtree, extract relevant simple sentence
-
-    # sent_tree.draw()
-
-
-    # print(len(sub_trees))
-    # exit()
 
 
     for t in sub_trees:
